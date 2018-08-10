@@ -12,7 +12,7 @@ It is currently very difficult to extract data from Facebook pages and groups si
 
 You need python 2+ and a number of libraries, including but may not be limited to (may be updated) the below:
 
-* csv
+* unicodecsv 
 * pandas
 * BeautifulSoup
 * cgi

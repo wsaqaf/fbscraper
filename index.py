@@ -1,6 +1,6 @@
 #!/usr/bin/python
 import sys
-import csv
+import unicodecsv as csv
 import os.path
 import time
 import string
