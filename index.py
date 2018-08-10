@@ -31,7 +31,7 @@ def clean_num(post_reaction):
 
 cgitb.enable()
 
-print "Content-Type: text/html"
+print "Content-Type: text/html; charset=utf-8"
 print ""
 
 arguments = cgi.FieldStorage()
@@ -58,7 +58,7 @@ else:
 
 posts = soup.findAll('div', attrs={'class':'_5pcr userContentWrapper'})
 
-print "<table border=1 style='font-size:13px;border-collapse:collapse;table-layout:fixed;width:1300px;word-break:break-all'><tr><td style='width:30px'><center>#</center></td><td style='width:120px;'>Post id</td><td style='width:100px;'>Time_published</td><td style='width:100px;'>Author name</a></td><td style='width:100px;'>Author ID</td><td style='width:300px'>Post message</td><td style='width:45px'><center>Shared<br> as</center></td><td style='width:25px'><center>#<br>pics</center></td><td style='width:100px;'><center>Pics</center></td><td style='width:25px'><center>#<br>vids</center></td><td style='width:100px'><center>Vids</center></td><td style='width:30px'><center>#<br>links</center></td><td style='width:40px'><center>Links</center></td><td style='width:40px'><center>Reacts</center></td><td style='width:40px'><center>Like</center></td><td style='width:40px'><center>Love</center></td><td style='width:40px'><center>Haha</center></td><td style='width:40px'><center>Angry</center></td><td style='width:40px'><center>Sad</center></td><td style='width:40px'><center>Wow</center></td><td style='width:40px'><center>Shares</center></td><td style='width:40px'><center>Comments</center></td></tr>"
+print "<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" /><title>Extraction results</title></head>\n<body><table border=1 style='font-size:13px;border-collapse:collapse;table-layout:fixed;width:1300px;word-break:break-all'><tr><td style='width:30px'><center>#</center></td><td style='width:120px;'>Post id</td><td style='width:100px;'>Time_published</td><td style='width:100px;'>Author name</a></td><td style='width:100px;'>Author ID</td><td style='width:300px'>Post message</td><td style='width:45px'><center>Shared<br> as</center></td><td style='width:25px'><center>#<br>pics</center></td><td style='width:100px;'><center>Pics</center></td><td style='width:25px'><center>#<br>vids</center></td><td style='width:100px'><center>Vids</center></td><td style='width:30px'><center>#<br>links</center></td><td style='width:40px'><center>Links</center></td><td style='width:40px'><center>Reacts</center></td><td style='width:40px'><center>Like</center></td><td style='width:40px'><center>Love</center></td><td style='width:40px'><center>Haha</center></td><td style='width:40px'><center>Angry</center></td><td style='width:40px'><center>Sad</center></td><td style='width:40px'><center>Wow</center></td><td style='width:40px'><center>Shares</center></td><td style='width:40px'><center>Comments</center></td></tr>"
 
 with open(arg+".csv", 'wb') as csvfile:
 	fieldnames = ['post_id','post_url','created_time','author_name','author_id','msg','shared_as','pic_count','pics','vid_count','vids','link_count','links','reactions','like','love','haha','angry','sad','wow','shares','comment_count']
@@ -240,6 +240,7 @@ for post in posts:
 	except:
 		#print "Error8"
 	        pass
+     post_shares=post_shares.split(' ', 1)[0]
      try:
         try:
           post_comments_block=post.find('h6', attrs={'class':'accessible_elem'}, string='Comments').text.encode('utf-8')
@@ -329,5 +330,5 @@ for post in posts:
      #print "Error with post: "+post_id+" "+str(e)
      continue
 
-print "</table><hr> Download CSV from <a href='"+arg+".csv"+"'>here</a>"
+print "</table><hr> Download CSV from <a href='"+arg+".csv"+"'>here</a></body></html>"
 
