@@ -1,9 +1,6 @@
-#FBScraper - A Python script that allows extracting data indirectly from Facebook pages and groups 
-#Written by Walid Al-Saqaf 2018
-#Modifying and copying permitted on the condition of referencing the original author
-
+#!/usr/bin/python
 import sys
-import csv
+import unicodecsv as csv
 import os.path
 import time
 import string
@@ -34,7 +31,7 @@ def clean_num(post_reaction):
 
 cgitb.enable()
 
-print "Content-Type: text/html"
+print "Content-Type: text/html; charset=utf-8"
 print ""
 
 arguments = cgi.FieldStorage()
@@ -61,7 +58,7 @@ else:
 
 posts = soup.findAll('div', attrs={'class':'_5pcr userContentWrapper'})
 
-print "<table border=1 style='font-size:13px;border-collapse:collapse;table-layout:fixed;width:1300px;word-break:break-all'><tr><td style='width:30px'><center>#</center></td><td style='width:120px;'>Post id</td><td style='width:100px;'>Time_published</td><td style='width:100px;'>Author name</a></td><td style='width:100px;'>Author ID</td><td style='width:300px'>Post message</td><td style='width:45px'><center>Shared<br> as</center></td><td style='width:25px'><center>#<br>pics</center></td><td style='width:100px;'><center>Pics</center></td><td style='width:25px'><center>#<br>vids</center></td><td style='width:100px'><center>Vids</center></td><td style='width:30px'><center>#<br>links</center></td><td style='width:40px'><center>Links</center></td><td style='width:40px'><center>Reacts</center></td><td style='width:40px'><center>Like</center></td><td style='width:40px'><center>Love</center></td><td style='width:40px'><center>Haha</center></td><td style='width:40px'><center>Angry</center></td><td style='width:40px'><center>Sad</center></td><td style='width:40px'><center>Wow</center></td><td style='width:40px'><center>Shares</center></td><td style='width:40px'><center>Comments</center></td></tr>"
+print "<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" /><title>Extraction results</title></head>\n<body><table border=1 style='font-size:13px;border-collapse:collapse;table-layout:fixed;width:1300px;word-break:break-all'><tr><td style='width:30px'><center>#</center></td><td style='width:120px;'>Post id</td><td style='width:100px;'>Time_published</td><td style='width:100px;'>Author name</a></td><td style='width:100px;'>Author ID</td><td style='width:300px'>Post message</td><td style='width:45px'><center>Shared<br> as</center></td><td style='width:25px'><center>#<br>pics</center></td><td style='width:100px;'><center>Pics</center></td><td style='width:25px'><center>#<br>vids</center></td><td style='width:100px'><center>Vids</center></td><td style='width:30px'><center>#<br>links</center></td><td style='width:40px'><center>Links</center></td><td style='width:40px'><center>Reacts</center></td><td style='width:40px'><center>Like</center></td><td style='width:40px'><center>Love</center></td><td style='width:40px'><center>Haha</center></td><td style='width:40px'><center>Angry</center></td><td style='width:40px'><center>Sad</center></td><td style='width:40px'><center>Wow</center></td><td style='width:40px'><center>Shares</center></td><td style='width:40px'><center>Comments</center></td></tr>"
 
 with open(arg+".csv", 'wb') as csvfile:
 	fieldnames = ['post_id','post_url','created_time','author_name','author_id','msg','shared_as','pic_count','pics','vid_count','vids','link_count','links','reactions','like','love','haha','angry','sad','wow','shares','comment_count']
@@ -77,11 +74,13 @@ regex4=re.compile('async.*')
 for post in posts:
    index=index+1
    try:
+     #print "trying "+str(index)
      post_id=post.find('div', attrs={'class':'_5pcp _5lel _2jyu _232_'})['id']
      if (":" in post_id):
 	     post_id=re.sub(r'feed_subtitle_(\d+).+', r'\1',post_id)
      else:
 	     post_id=re.sub(r'.+?\;(\d+)\;.+', r'\1',post_id)
+
      profile_tmp=post.find('a', attrs={'data-hovercard': regex1})
      tmp=re.search(r'id\=(.+?)\&',str(profile_tmp['data-hovercard']))
      profile_id=tmp.group(1)
@@ -90,7 +89,14 @@ for post in posts:
      profile_name=profile_block['aria-label'].encode('utf-8')
      post_with_time=post.find('abbr', {'class' : '_5ptz'})
      post_created_time=post_with_time['title']
-     post_created_time=datetime.datetime.strptime(post_created_time, '%m/%d/%Y %I:%M%p').strftime('%Y-%m-%d %H:%M')
+     try:
+         post_created_time=datetime.datetime.strptime(post_created_time, '%m/%d/%Y %I:%M%p').strftime('%Y-%m-%d %H:%M')
+     except:
+	 try:
+	   post_created_time=datetime.datetime.strptime(post_created_time, '%Y-%m-%d %H:%M').strftime('%Y-%m-%d %H:%M')	
+	 except:
+	   #print "Error0"
+	   pass
      post_url=post_with_time.parent['href']
      if post_url.startswith('/'):
 	post_url='https://facebook.com'+str(post_url)
@@ -106,10 +112,12 @@ for post in posts:
         if (len(shared_as)>1 and len(shared_url)>1):
 		is_shared=1
      except:
+	#print "Error1"
 	pass
      try:
           post_text=post.find('div', attrs={'class': regex2}).text.encode('utf-8')
      except:
+	  #print "Error2"
 	  post_text=" "*5
 
      post_text=re.sub(' +',' ',re.sub('See More', '',str(post_text)))
@@ -138,6 +146,7 @@ for post in posts:
 	 if len(post_images)<5:
 		pic_count=0
      except:
+	 #print "Error3"
          pass
      try:
          post_vids=post.find_all('img', attrs={'class':'_3chq'})
@@ -149,6 +158,7 @@ for post in posts:
          if len(post_videos)<5:
                 vid_count=0
      except:
+	#print "Error4"
 	pass
      post_links=''
      link_count=0
@@ -176,6 +186,7 @@ for post in posts:
                 link_count=0
 
      except:
+	 #print "Error5"
          pass
 
      post_shares=0
@@ -213,11 +224,12 @@ for post in posts:
 			post_reactions[indx]=0
 		post_reaction=post_reaction+int(post_reactions[indx])
 	     except:
-		#print "Error!"
+		#print "Error6"
 		pass
 	     indx=indx+1	
 	except:
-           pass
+           #print "Error7"
+	   pass
      try:
         post_shares=post.find('a', attrs={'class':'UFIShareLink'}).text.encode('utf-8')
         post_shares=int(re.sub(' Shares?','',post_shares))
@@ -226,16 +238,20 @@ for post in posts:
        		post_shares=post.find('a', attrs={'class':'_ipm _2x0m'}).text.encode('utf-8')
        		post_shares=int(re.sub(' Shares?','',post_shares))
 	except:
+		#print "Error8"
 	        pass
+     post_shares=post_shares.split(' ', 1)[0]
      try:
         try:
           post_comments_block=post.find('h6', attrs={'class':'accessible_elem'}, string='Comments').text.encode('utf-8')
         except:
+	  #print "Error9"
           pass
         try:
           post_comments_block=post.find_all('div', attrs={'class':'UFICommentContentBlock'})
           comment_count=len(post_comments_block)
         except:
+	  #print "Error10"
           pass
         try:
           post_comments=post.find('a', attrs={'class':'UFIPagerLink'}).text.encode('utf-8')
@@ -243,6 +259,7 @@ for post in posts:
 	  tmp=clean_num(tmp)
           comment_count=comment_count+int(tmp)
         except:
+	  #print "Error11"
           pass
         try:
           post_replies=post.find('div', attrs={'class':'UFIImageBlockContent _42ef _8u'}).text.encode('utf-8')
@@ -250,8 +267,10 @@ for post in posts:
           tmp=clean_num(tmp)
           comment_count=comment_count+int(tmp)
         except:
+	  #print "Error12"
           pass
      except:
+	#print "Error13"
         post_comments_block="None"
         pass
               
@@ -311,5 +330,5 @@ for post in posts:
      #print "Error with post: "+post_id+" "+str(e)
      continue
 
-print "</table><hr> Download CSV from <a href='"+arg+".csv"+"'>here</a>"
+print "</table><hr> Download CSV from <a href='"+arg+".csv"+"'>here</a></body></html>"
 
