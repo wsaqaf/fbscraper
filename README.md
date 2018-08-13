@@ -36,12 +36,21 @@ Simply store the file in its own folder and ensure that all the libraries are th
 - Save the file to the same directory where the fbscraper.py is
 - Then simply run the command prompt in the terminal window while in the same directory:
 ```
-python fbscraper.py X > X-out.html
+python fbscraper.py X
 ```
-where X is the name of the facebook page. 
+where X is a reference (eg., the name) of the facebook page or group and must have already had its raw content saved locally to X.html . 
 
-If successful, you will soon find two files: X.csv and X-out.html. The latter is used for you to preview the results and the core data is found in the CSV file X.csv.
- 
+If successful, you will soon find two files: X.csv and X-scraped.html. The latter is used for you to preview the results and the core data is found in the CSV file X.csv.
+
+### Batch processing
+
+You can also run the tool to process a batch of files. You can do this with the same command as above and have the file names of the pages listed as arguments as follows:
+```
+python fbscraper.py X1 X2 X3 X4
+```
+
+The tool would then loop through them to extract data and save it in two files per source: (X1.html X2-scraped.html ...) for views and X1.csv, X2.csv, ... for the actual CSV data. Both formats are UTF-8 encoded.
+
 ## Author 
 
 The principal author is Walid Al-Saqaf, a developer and senior lecturer at Södertörn University in Stockholm
