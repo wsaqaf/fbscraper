@@ -205,7 +205,7 @@ for arg in args:
 	     post_reactions[0]=1
 	   elif (',' in post_likes_details):
 	     post_reactions[0]=3
-	     tmp=re.search(r'\d+[\.]?[K]?[M]?B', post_likes_details).group()
+	     tmp=re.search(r'\d+[\.]?[K]?[M]?', post_likes_details).group()
 	     tmp=clean_num(tmp)
 	     if (int(tmp)>0):
 		   post_reactions[0]=post_reactions[0]+int(tmp)
@@ -243,7 +243,7 @@ for arg in args:
 	   except:
 		   #print "Error8"
 		   pass
-	post_shares=post_shares.split(' ', 1)[0]
+	post_shares=str(post_shares).split(' ', 1)[0]
 	try:
 	   try:
 	     post_comments_block=post.find('h6', attrs={'class':'accessible_elem'}, string='Comments').text.encode('utf-8')
