@@ -17,6 +17,7 @@ You need python 2+ and a number of libraries, including but may not be limited t
 * unicodecsv 
 * pandas
 * BeautifulSoup
+* lxml
 * cgi
 * cgitb
 * urllib
