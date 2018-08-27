@@ -6,6 +6,8 @@ A simple script that allows extracting, viewing and converting posts on Facebook
 
 It is currently very difficult to extract data from Facebook pages and groups since API access is limited and prevents access to key information such as authors' names, reactions, etc. The data does exist there on the various pages but it is quite time consuming to extract the data manually. So this script does the job for you. All you need to do is login your account, save the data you see on the screen using Inspect (details below) and let the script do the rest.
 
+[Optional] In addition to the script, there is another Apple Script script that can automate the process of extracting the raw html data from facebook pages and groups. Note that this would only work on a Mac OS computer.
+
 ## Getting Started
 
 ### Dependencies
@@ -59,7 +61,7 @@ Reach out to the developer by emailing to walid.al-saqaf@sh.se
 
 ## Version History
 
-* 0.1
+* 0.2
     * Initial Release
 
 ## License
