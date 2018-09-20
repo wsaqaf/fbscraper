@@ -28,6 +28,8 @@ You have the option of having this as a web service or run it via the command li
 
 Simply store the file in its own folder and ensure that all the libraries are there (use pip install X, where X is the missing python package)
 
+In addition to the default English version of Facebook (lang="en"), the tool also supports Swedish (lang="sv"). Additional languages can be supported if needed. To select the language, you can update the *not_english* variable to the two letter code of the language you wish to add. 
+
 ### Executing program
 
 - First you need to go to your Facebook page or group you wish to extract data from

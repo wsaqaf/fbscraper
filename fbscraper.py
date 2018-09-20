@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 #!/usr/bin/python
 import sys
 import unicodecsv as csv
@@ -12,6 +13,15 @@ import datetime
 import cgi
 import cgitb
 import urllib
+
+non_english='' #Only Swedish 'sv' is supported for now
+
+if non_english=='sv':
+	reactions=['Gilla','Älska','Haha','Arg','Ledsen','Wow']
+	shares_word='delningar'
+else:
+	reactions=['Like','Love','Haha','Angry','Sad','Wow']
+	shares_word='Shares'
 
 #####Functions#######
 def clean_num(post_reaction):
@@ -54,17 +64,18 @@ for arg in args:
 		       soup = BeautifulSoup(fp,"lxml")
 	   else:
 		   print "The input file "+arg+".html could not be found!"
-		   continue 
+		   continue
    else:
 	   print "No input file provided!"
 	   continue
 
+   source_id=arg
    posts = soup.findAll('div', attrs={'class':'_5pcr userContentWrapper'})
 
    output= "<html>\n<head>\n<meta http-equiv=\"Content-Type\" content=\"text/html; charset=utf-8\" /><title>Extraction results</title></head>\n<body><table border=1 style='font-size:13px;border-collapse:collapse;table-layout:fixed;width:1300px;word-break:break-all'><tr><td style='width:30px'><center>#</center></td><td style='width:120px;'>Post id</td><td style='width:100px;'>Time_published</td><td style='width:100px;'>Author name</a></td><td style='width:100px;'>Author ID</td><td style='width:300px'>Post message</td><td style='width:45px'><center>Shared<br> as</center></td><td style='width:25px'><center>#<br>pics</center></td><td style='width:100px;'><center>Pics</center></td><td style='width:25px'><center>#<br>vids</center></td><td style='width:100px'><center>Vids</center></td><td style='width:30px'><center>#<br>links</center></td><td style='width:40px'><center>Links</center></td><td style='width:40px'><center>Reacts</center></td><td style='width:40px'><center>Like</center></td><td style='width:40px'><center>Love</center></td><td style='width:40px'><center>Haha</center></td><td style='width:40px'><center>Angry</center></td><td style='width:40px'><center>Sad</center></td><td style='width:40px'><center>Wow</center></td><td style='width:40px'><center>Shares</center></td><td style='width:40px'><center>Comments</center></td></tr>"
 
    with open(arg+".csv", 'wb') as csvfile:
-	   fieldnames = ['post_id','post_url','created_time','author_name','author_id','msg','shared_as','pic_count','pics','vid_count','vids','link_count','links','reactions','like','love','haha','angry','sad','wow','shares','comment_count']
+	   fieldnames = ['source_id','post_id','post_url','created_time','author_name','author_id','msg','shared_as','pic_count','pics','vid_count','vids','link_count','links','reactions','like','love','haha','angry','sad','wow','shares','comment_count']
 	   writer=csv.DictWriter(csvfile, fieldnames=fieldnames, delimiter=',', lineterminator='\n')
 	   writer.writeheader()
 
@@ -196,7 +207,6 @@ for arg in args:
 
 	post_likes_details=''
 	post_reaction=0
-	reactions=['Like','Love','Haha','Angry','Sad','Wow']
 	post_reactions=[0,0,0,0,0,0]
 
 	try:
@@ -235,11 +245,11 @@ for arg in args:
 	      pass
 	try:
 	   post_shares=post.find('a', attrs={'class':'UFIShareLink'}).text.encode('utf-8')
-	   post_shares=int(re.sub(' Shares?','',post_shares))
+	   post_shares=int(re.sub(' '+shares_word+'?','',post_shares))
 	except:
 	   try:
 		   post_shares=post.find('a', attrs={'class':'_ipm _2x0m'}).text.encode('utf-8')
-		   post_shares=int(re.sub(' Shares?','',post_shares))
+		   post_shares=int(re.sub(' '+shares_word+'?','',post_shares))
 	   except:
 		   #print "Error8"
 		   pass
@@ -317,7 +327,7 @@ for arg in args:
 	output=output+"<td><center>"+str(post_shares)+"</center></td><td><center>"+str(comment_count)+"</center></td></center></tr>"
 
 	with open(arg+".csv", 'ab') as csvfile:
-	   row = [post_id,post_url,post_created_time,profile_name,profile_id,post_text,shared_as,pic_count,post_images,vid_count,post_videos,link_count,post_links,post_reaction,post_reactions[0],post_reactions[1],post_reactions[2],post_reactions[3],post_reactions[4],post_reactions[5],post_shares,comment_count]
+	   row = [source_id,post_id,post_url,post_created_time,profile_name,profile_id,post_text,shared_as,pic_count,post_images,vid_count,post_videos,link_count,post_links,post_reaction,post_reactions[0],post_reactions[1],post_reactions[2],post_reactions[3],post_reactions[4],post_reactions[5],post_shares,comment_count]
 	   writer = csv.writer(csvfile)
 	   writer.writerow(row)
 
