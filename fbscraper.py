@@ -14,7 +14,8 @@ import cgi
 import cgitb
 import urllib
 
-non_english='' #Only Swedish 'sv' is supported for now
+#The below value is the interface language of Facebook you are using (not the language of the content itself)
+non_english='sv' #Only Swedish 'sv' is supported for now
 
 if non_english=='sv':
 	reactions=['Gilla','Älska','Haha','Arg','Ledsen','Wow']
@@ -84,6 +85,7 @@ for arg in args:
    regex2=re.compile('.*_5pbx.*')
    regex3=re.compile('.*scaledImageFit.*')
    regex4=re.compile('async.*')
+   img_regex=re.compile('_s0 _4ooo _\d.*?_rw img')
 
    for post in posts:
       index=index+1
@@ -98,7 +100,7 @@ for arg in args:
 	profile_tmp=post.find('a', attrs={'data-hovercard': regex1})
 	tmp=re.search(r'id\=(.+?)\&',str(profile_tmp['data-hovercard']))
 	profile_id=tmp.group(1)
-	profile_block=post.find('img', attrs={'class':'_s0 _4ooo _5xib _5sq7 _44ma _rw img'})
+	profile_block=post.find('img', attrs={'class': img_regex})
 	profile_img=profile_block['src']
 	profile_name=profile_block['aria-label'].encode('utf-8')
 	post_with_time=post.find('abbr', {'class' : '_5ptz'})
@@ -237,7 +239,7 @@ for arg in args:
 			   post_reactions[indx]=0
 		   post_reaction=post_reaction+int(post_reactions[indx])
 		except:
-		   ##print "Error6"
+		   #print "Error6"
 		   pass
 		indx=indx+1
 	   except:
