@@ -1,11 +1,9 @@
 import sys
 import os
 import json
-import pprint
 import csv
-import re, string
+import re
 from datetime import datetime
-from haralyzer import HarParser, HarPage
 
 ####################### functions ###########################
 def load_post(p):
@@ -47,7 +45,7 @@ def load_post(p):
             fbpost["weblink_preview"]=attachment['styles']['attachment']['title_with_entities']['text'].replace('\n', '')
 #### Photo (if any) ####
         elif (attachment_type=='photo'):
-            fbpost["photo_url"]=attachment['styles']['attachment']['media']['photo_image']['uri']                    
+            fbpost["photo_url"]=attachment['styles']['attachment']['media']['photo_image']['uri']
 #### Video (if any) ####
         elif (attachment_type.startswith('video')):
             fbpost["video_url"]=attachment['styles']['attachment']['media']['url']
@@ -78,11 +76,11 @@ def load_post(p):
     return fbpost_list
 
 ####################### end functions ###########################
-        
-pp = pprint.PrettyPrinter(indent=4)
+
+#pp = pprint.PrettyPrinter(indent=4)
 
 file_name="www.facebook.com.har"
-if len(sys.argv)>1: 
+if len(sys.argv)>1:
     if not sys.argv[1].startswith('-'): file_name=sys.argv[1]
 
 if not os.path.isfile(file_name): exit(1)
@@ -99,7 +97,7 @@ except:
     try:
         m=re.search('https://www\.facebook\.com/(.+[^/])/?',content_j['log']['entries'][0]['url'])
     except: pass
-        
+
 if m:
     file_name=m.group(1)
     pattern=re.compile('[\W_]+')
@@ -108,9 +106,9 @@ if m:
 else:
     print ("Failed to find reference")
     exit(1)
-        
+
 content="["
-    
+
 for entry in content_j['log']['entries']:
     if entry['request']['url']=='https://www.facebook.com/api/graphql/':
         try:
@@ -163,17 +161,16 @@ for post in data:
     except:
         try:
             posts=post['data']['serpResponse']['results']['edges']
-#            print("Parsing search results")
             for p in posts:
                 new_post=load_post(p['relay_rendering_strategy']['view_model']['click_model']['story'])
                 fbposts_list.append(new_post)
             continue
         except:
             pass
-#            pp.pprint(fbpost)
 
 if (len(fbposts_list)>1):
-    with open(file_name+'.csv', 'w') as f:
+    dtime=datetime.now().strftime("%Y%m%d%H%M")
+    with open(file_name+'-'+dtime+'.csv', 'w') as f:
         writer = csv.writer(f)
         writer.writerows(fbposts_list)
-        print("Exported CSV data to: "+file_name+'.csv')
+        print("Exported CSV data to: "+file_name+'-'+dtime+'.csv')
