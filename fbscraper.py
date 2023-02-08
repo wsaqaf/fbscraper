@@ -57,7 +57,7 @@ def load_post(p):
     try:
         feedback=p['comet_sections']['feedback']['story']['feedback_context']['feedback_target_with_context']['ufi_renderer']['feedback']['comet_ufi_summary_and_actions_renderer']['feedback']
         fbpost["shares"]=feedback['share_count']['count']
-        fbpost["comments"]=feedback['comment_count']['total_count']
+        fbpost["comments"]=feedback['comments_count_summary_renderer']['feedback']['comment_count']['total_count']
         try: fbpost["video_view_count"]=feedback['video_view_count']
         except: pass
         for reaction in feedback['cannot_see_top_custom_reactions']['top_reactions']['edges']:
@@ -77,8 +77,6 @@ def load_post(p):
 
 ####################### end functions ###########################
 
-#pp = pprint.PrettyPrinter(indent=4)
-
 file_name="www.facebook.com.har"
 if len(sys.argv)>1:
     if not sys.argv[1].startswith('-'): file_name=sys.argv[1]
@@ -87,6 +85,10 @@ if not os.path.isfile(file_name): exit(1)
 
 with open(file_name, 'r', encoding="utf-8") as f:
     contents=f.read()
+    dtime=datetime.now().strftime("%Y%m%d%H%M")
+    with open(file_name.replace('.har','')+'-'+dtime+'.har', 'w') as f2:
+        f2.write(contents)
+        print("Copied har file to: "+file_name.replace('.har','')+'-'+dtime+'.har')	
 
 content_j=json.loads(contents)
 m=""
@@ -102,6 +104,7 @@ if m:
     file_name=m.group(1)
     pattern=re.compile('[\W_]+')
     file_name=pattern.sub('_', file_name)
+    if len(file_name)>50: file_name=file_name[:50]
     print("Found: "+file_name)
 else:
     print ("Failed to find reference")
@@ -169,8 +172,8 @@ for post in data:
             pass
 
 if (len(fbposts_list)>1):
-    dtime=datetime.now().strftime("%Y%m%d%H%M")
     with open(file_name+'-'+dtime+'.csv', 'w') as f:
         writer = csv.writer(f)
         writer.writerows(fbposts_list)
         print("Exported CSV data to: "+file_name+'-'+dtime+'.csv')
+        
