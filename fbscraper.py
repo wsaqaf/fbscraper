@@ -4,9 +4,16 @@ import json
 import csv
 import re
 from datetime import datetime
+from bs4 import BeautifulSoup
+import html
+from pprint import pprint
+import logging
 
 ####################### functions ###########################
-def load_post(p):
+def load_post(p,i):
+    fbpost={}
+    for r in labels_str: fbpost[r]=""
+    for r in labels_num: fbpost[r]=0
     fbpost["post_id"]=p['post_id']
 #### post time & url ####
     fbpost["post_time"]=datetime.fromtimestamp(p['comet_sections']['context_layout']['story']['comet_sections']['metadata'][0]['story']['creation_time']).isoformat()
@@ -75,6 +82,27 @@ def load_post(p):
     for item in fbposts_list[0]: fbpost_list.append(fbpost[item])
     return fbpost_list
 
+#check if key exists
+def key_exists(element, *keys):
+    if not isinstance(element, dict):
+        raise AttributeError('keys_exists() expects dict as first argument.')
+    if len(keys) == 0:
+        raise AttributeError('keys_exists() expects at least two arguments, one given.')
+
+    _element = element
+    for key in keys:
+        try:
+            _element = _element[key]
+        except KeyError:
+            return False
+    return True
+
+#for debugging purposes only
+def debug_content(content):
+    text_file = open("temp.txt", "w")
+    text_file.write(content)
+    text_file.close()
+
 ####################### end functions ###########################
 
 file_name="www.facebook.com.har"
@@ -111,13 +139,39 @@ else:
     exit(1)
 
 content="["
-
+top_posts=[]
 for entry in content_j['log']['entries']:
     if entry['request']['url']=='https://www.facebook.com/api/graphql/':
         try:
             content=content+entry['response']['content']['text'].replace('\\"','')+","
         except:
             pass
+    elif entry['_resourceType']=="document":
+        try:
+            if ('text' in entry['response']['content']):
+                soup = BeautifulSoup(entry['response']['content']['text'], "html.parser")            
+                script_tags = soup.find_all('script', type='application/json')
+                content_list = [tag.text.strip() for tag in script_tags]
+                for tag in script_tags:
+                    soup2 = BeautifulSoup(tag.string)
+                    tag_text=soup2.get_text()
+                    json_el=json.loads(tag_text)
+                    try:
+                        for item in json_el['require'][0][3][0]['__bbox']['require']:
+                            try:
+                                try:
+                                    if (key_exists(item[3][1],'__bbox','result','data','page','timeline_feed_units')):
+                                        top_posts.append(item[3][1]['__bbox']['result']['data']['page']['timeline_feed_units']['edges'][0])
+                                except:
+                                    try:
+                                        if (key_exists(item[3][1],'__bbox','result','data','serpResponse','results','edges')):
+                                            temp_j=item[3][1]['__bbox']['result']['data']['serpResponse']['results']['edges'][0]
+                                            if (key_exists(temp_j,'relay_rendering_strategy','view_model','click_model')):
+                                                top_posts.append(item[3][1]['__bbox']['result'])
+                                    except: pass
+                            except: pass
+                    except: pass
+        except (AttributeError, KeyError) as ex: logging.exception("error")
 
 if (not file_name):
     print ("Found no page or group. Exiting...")
@@ -126,46 +180,40 @@ if (not file_name):
 content=content.rstrip(",")+"]"
 content=re.compile('}\s*{').sub('},{', content)
 
-#for debugging purposes only
-#text_file = open("temp.json", "w")
-#text_file.write(content)
-#text_file.close()
-
-#print(content)
-#print("=============================")
-#exit(1)
-
 data = json.loads(content)
 
+if (top_posts): data=top_posts+data
+
 labels_str=["post_id","post_time","post_url","user_id","user_name","user_webpage","user_profile","user_profile_pic","post_text","weblink_url","weblink_title","weblink_pic","weblink_preview","photo_url","video_url","video_duration"]
-labels_num=["shares","comments","video_view_count","reactions",'like','love','wow','haha','sad','angry']
+labels_num=["video_view_count","shares","comments","reactions",'like','love','wow','haha','sad','angry']
 fbposts_list=[]
 fbposts_list.append(labels_str+labels_num)
 
 i=-1
 for post in data:
+     
+    try: post=post['data']
+    except: pass
     i=i+1
-    fbpost={}
-    for r in labels_str: fbpost[r]=""
-    for r in labels_num: fbpost[r]=0
     try:
-        if (post['data']['node']['__typename']=='Story'):
-            p=[post['data']['node']]
-        elif (post['data']['node']['__typename']=='User' or post['data']['node']['__typename']=='Page' or post['data']['node']['__typename']=='Group'):
-            if (post['data']['node']['__typename']=='User'):
-                posts=post['data']['node']['timeline_list_feed_units']['edges']
-            elif (post['data']['node']['__typename']=='Page'):
-                posts=post['data']['node']['timeline_feed_units']['edges']
-            elif (post['data']['node']['__typename']=='Group'):
-                posts=post['data']['node']['group_feed']['edges']
+        if (post['node']['__typename']=='Story'):
+            new_post=load_post(post['node'],i)
+            fbposts_list.append(new_post)
+        elif (post['node']['__typename']=='User' or post['node']['__typename']=='Page' or post['node']['__typename']=='Group'):
+            if (post['node']['__typename']=='User'):
+                posts=post['node']['timeline_list_feed_units']['edges']
+            elif (post['node']['__typename']=='Page'):
+                posts=post['node']['timeline_feed_units']['edges']
+            elif (post['node']['__typename']=='Group'):
+                posts=post['node']['group_feed']['edges']
             for p in posts:
-                new_post=load_post(p['node'])
+                new_post=load_post(p['node'],i)
                 fbposts_list.append(new_post)
     except:
         try:
-            posts=post['data']['serpResponse']['results']['edges']
+            posts=post['serpResponse']['results']['edges']
             for p in posts:
-                new_post=load_post(p['relay_rendering_strategy']['view_model']['click_model']['story'])
+                new_post=load_post(p['relay_rendering_strategy']['view_model']['click_model']['story'],i)
                 fbposts_list.append(new_post)
             continue
         except:
