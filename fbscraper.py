@@ -159,17 +159,15 @@ for entry in content_j['log']['entries']:
                     try:
                         for item in json_el['require'][0][3][0]['__bbox']['require']:
                             try:
+                                if (key_exists('__bbox','result','data','page','timeline_feed_units')):
+                                    top_posts.append(item[3][1]['__bbox']['result']['data']['page']['timeline_feed_units']['edges'][0])
+                            except:
                                 try:
-                                    if (key_exists(item[3][1],'__bbox','result','data','page','timeline_feed_units')):
-                                        top_posts.append(item[3][1]['__bbox']['result']['data']['page']['timeline_feed_units']['edges'][0])
-                                except:
-                                    try:
-                                        if (key_exists(item[3][1],'__bbox','result','data','serpResponse','results','edges')):
-                                            temp_j=item[3][1]['__bbox']['result']['data']['serpResponse']['results']['edges'][0]
-                                            if (key_exists(temp_j,'relay_rendering_strategy','view_model','click_model')):
-                                                top_posts.append(item[3][1]['__bbox']['result'])
-                                    except: pass
-                            except: pass
+                                    if (key_exists(item[3][1],'__bbox','result','data','serpResponse','results','edges')):
+                                        temp_j=item[3][1]['__bbox']['result']['data']['serpResponse']['results']['edges'][0]
+                                        if (key_exists(temp_j,'relay_rendering_strategy','view_model','click_model')):
+                                            top_posts.append(item[3][1]['__bbox']['result'])
+                                except: pass
                     except: pass
         except (AttributeError, KeyError) as ex: logging.exception("error")
 
@@ -183,7 +181,7 @@ content=re.compile('}\s*{').sub('},{', content)
 data = json.loads(content)
 
 if (top_posts): data=top_posts+data
-
+    
 labels_str=["post_id","post_time","post_url","user_id","user_name","user_webpage","user_profile","user_profile_pic","post_text","weblink_url","weblink_title","weblink_pic","weblink_preview","photo_url","video_url","video_duration"]
 labels_num=["video_view_count","shares","comments","reactions",'like','love','wow','haha','sad','angry']
 fbposts_list=[]
