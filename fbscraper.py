@@ -153,7 +153,7 @@ for entry in content_j['log']['entries']:
                 script_tags = soup.find_all('script', type='application/json')
                 content_list = [tag.text.strip() for tag in script_tags]
                 for tag in script_tags:
-                    soup2 = BeautifulSoup(tag.string)
+                    soup2 = BeautifulSoup(tag.string, "html.parser")
                     tag_text=soup2.get_text()
                     json_el=json.loads(tag_text)
                     try:
