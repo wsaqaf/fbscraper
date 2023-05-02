@@ -6,7 +6,6 @@ import re
 from datetime import datetime
 from bs4 import BeautifulSoup
 import html
-from pprint import pprint
 import logging
 
 ####################### functions ###########################
@@ -64,7 +63,9 @@ def load_post(p,i):
     try:
         feedback=p['comet_sections']['feedback']['story']['feedback_context']['feedback_target_with_context']['ufi_renderer']['feedback']['comet_ufi_summary_and_actions_renderer']['feedback']
         fbpost["shares"]=feedback['share_count']['count']
-        fbpost["comments"]=feedback['comments_count_summary_renderer']['feedback']['comment_count']['total_count']
+        try: fbpost["comments"]=feedback['comments_count_summary_renderer']['feedback']['comment_count']['total_count']
+        except: fbpost["comments"]=feedback['comments_count_summary_renderer']['feedback']['total_comment_count']
+
         try: fbpost["video_view_count"]=feedback['video_view_count']
         except: pass
         for reaction in feedback['cannot_see_top_custom_reactions']['top_reactions']['edges']:
