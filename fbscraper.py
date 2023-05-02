@@ -9,6 +9,33 @@ import html
 import logging
 
 ####################### functions ###########################
+
+def get_json_element_by_key(obj, search_key):
+    try:
+        if isinstance(obj, dict):
+            for key, value in obj.items():
+                if key == search_key:
+                    return value
+                else:
+                    result = get_json_element_by_key(value, search_key)
+                    if result is not False:
+                        return result
+        elif isinstance(obj, list):
+            for item in obj:
+                result = get_json_element_by_key(item, search_key)
+                if result is not False:
+                    return result
+        return False
+    except:
+        return False
+
+def find_value_by_key(json_string, search_key):
+    try:
+        data = json.loads(json_string)
+        return get_json_element_by_key(data, search_key)
+    except json.JSONDecodeError:
+        return False
+
 def load_post(p,i):
     fbpost={}
     for r in labels_str: fbpost[r]=""
@@ -29,26 +56,26 @@ def load_post(p,i):
     fbpost["user_webpage"]=p['comet_sections']['context_layout']['story']['comet_sections']['title']['story']['actors'][0]['url']
     fbpost["user_profile"]=p['comet_sections']['context_layout']['story']['comet_sections']['actor_photo']['story']['actors'][0]['profile_url']
     fbpost["user_profile_pic"]=p['comet_sections']['context_layout']['story']['comet_sections']['actor_photo']['story']['actors'][0]['profile_picture']['uri']
-
+    
 #### post content ####
-    try:
-        fbpost["post_text"]=p['comet_sections']['content']['story']['message']['text'].replace('\n', '')
-    except:
-        fbpost["post_text"]=""
-
+    try: fbpost["post_text"]=p['comet_sections']['content']['story']['message']['text'].replace('\n', '')
+    except: fbpost["post_text"]=""
+    
     for attachment in p['comet_sections']['content']['story']['attachments']:
         attachment_type=attachment['style_list'][0]
 #### Web preview (if any) ####
         if (attachment_type=='share'):
-            fbpost["weblink_url"]=attachment['styles']['attachment']['url']
-            fbpost["weblink_title"]=attachment['styles']['attachment']['source']['text']
-            try:
-                fbpost["weblink_pic"]=attachment['styles']['attachment']['media']['large_share_image']['uri']
-            except:
-                pass
             if (attachment['styles']['attachment']['story_attachment_link_renderer']['attachment']['web_link']['__typename']=='ExternalWebLink'):
                 fbpost["weblink_url"]=attachment['styles']['attachment']['story_attachment_link_renderer']['attachment']['web_link']['url']
-            fbpost["weblink_preview"]=attachment['styles']['attachment']['title_with_entities']['text'].replace('\n', '')
+            else:
+                try:
+                    fbpost["weblink_url"]=attachment['styles']['attachment']['url']
+                    fbpost["weblink_title"]=attachment['styles']['attachment']['source']['text']
+                except: pass
+            try: fbpost["weblink_pic"]=attachment['styles']['attachment']['media']['large_share_image']['uri']
+            except: pass
+            try: fbpost["weblink_preview"]=attachment['styles']['attachment']['title_with_entities']['text'].replace('\n', '')
+            except: pass                
 #### Photo (if any) ####
         elif (attachment_type=='photo'):
             fbpost["photo_url"]=attachment['styles']['attachment']['media']['photo_image']['uri']
@@ -60,9 +87,11 @@ def load_post(p,i):
             fbpost["video_thumbnail"]=attachment['styles']['attachment']['media']['preferred_thumbnail']['image']['uri']
         break
 #### Reactions ####
+
     try:
         feedback=p['comet_sections']['feedback']['story']['feedback_context']['feedback_target_with_context']['ufi_renderer']['feedback']['comet_ufi_summary_and_actions_renderer']['feedback']
         fbpost["shares"]=feedback['share_count']['count']
+        
         try: fbpost["comments"]=feedback['comments_count_summary_renderer']['feedback']['comment_count']['total_count']
         except: fbpost["comments"]=feedback['comments_count_summary_renderer']['feedback']['total_comment_count']
 
@@ -76,8 +105,7 @@ def load_post(p,i):
             elif (reaction['node']['id']=="908563459236466"): fbpost["sad"]=reaction['reaction_count']
             elif (reaction['node']['id']=="444813342392137"): fbpost["angry"]=reaction['reaction_count']
         fbpost["reactions"]=fbpost["like"]+fbpost["love"]+fbpost["wow"]+fbpost["haha"]+fbpost["sad"]+fbpost["angry"]
-    except:
-        pass
+    except: pass
 #### add post to collection using post_id as key ####
     fbpost_list=[]
     for item in fbposts_list[0]: fbpost_list.append(fbpost[item])
@@ -150,26 +178,25 @@ for entry in content_j['log']['entries']:
     elif entry['_resourceType']=="document":
         try:
             if ('text' in entry['response']['content']):
-                soup = BeautifulSoup(entry['response']['content']['text'], "html.parser")            
-                script_tags = soup.find_all('script', type='application/json')
+                soup = BeautifulSoup(entry['response']['content']['text'], "html.parser")
+                script_tags = soup.find_all('script')#, type='application/json')
                 content_list = [tag.text.strip() for tag in script_tags]
                 for tag in script_tags:
-                    soup2 = BeautifulSoup(tag.string, "html.parser")
-                    tag_text=soup2.get_text()
-                    json_el=json.loads(tag_text)
-                    try:
-                        for item in json_el['require'][0][3][0]['__bbox']['require']:
+                    m = re.search("(\{\"define\"\:\[\[.+?)\)\;", str(tag))
+                    if m:
+                        tag_text = m.group(1)
+                        json_el=json.loads(tag_text)
+                        try:
+                            top_post=get_json_element_by_key(json_el,"timeline_list_feed_units")
+                            if (top_post):
+                                top_posts.append(top_post['edges'][0])
+                        except:
                             try:
-                                if (key_exists('__bbox','result','data','page','timeline_feed_units')):
-                                    top_posts.append(item[3][1]['__bbox']['result']['data']['page']['timeline_feed_units']['edges'][0])
-                            except:
-                                try:
-                                    if (key_exists(item[3][1],'__bbox','result','data','serpResponse','results','edges')):
-                                        temp_j=item[3][1]['__bbox']['result']['data']['serpResponse']['results']['edges'][0]
-                                        if (key_exists(temp_j,'relay_rendering_strategy','view_model','click_model')):
-                                            top_posts.append(item[3][1]['__bbox']['result'])
-                                except: pass
-                    except: pass
+                                if (key_exists(item[3][1],'__bbox','result','data','serpResponse','results','edges')):
+                                    temp_j=item[3][1]['__bbox']['result']['data']['serpResponse']['results']['edges'][0]
+                                    if (key_exists(temp_j,'relay_rendering_strategy','view_model','click_model')):
+                                        top_posts.append(item[3][1]['__bbox']['result'])
+                            except: pass
         except (AttributeError, KeyError) as ex: logging.exception("error")
 
 if (not file_name):
@@ -208,6 +235,10 @@ for post in data:
             for p in posts:
                 new_post=load_post(p['node'],i)
                 fbposts_list.append(new_post)
+        else:
+            new_post=load_post(post['node'],i)
+            fbposts_list.append(new_post)
+                
     except:
         try:
             posts=post['serpResponse']['results']['edges']
