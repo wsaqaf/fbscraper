@@ -79,6 +79,10 @@ def load_post(p,i):
 #### Photo (if any) ####
         elif (attachment_type=='photo'):
             fbpost["photo_url"]=attachment['styles']['attachment']['media']['photo_image']['uri']
+        elif (attachment_type=='album'):
+            for photo in attachment['styles']['attachment']['all_subattachments']['nodes']:
+                fbpost["photo_url"]=fbpost["photo_url"]+photo['media']['image']['uri']+"\n"
+            fbpost["photo_url"]=fbpost["photo_url"].strip()
 #### Video (if any) ####
         elif (attachment_type.startswith('video')):
             fbpost["video_url"]=attachment['styles']['attachment']['media']['url']
@@ -134,7 +138,7 @@ def debug_content(content):
 
 ####################### end functions ###########################
 
-file_name="www.facebook.com.har"
+file_name="/Users/walid/desktop/www.facebook.com.har"
 if len(sys.argv)>1:
     if not sys.argv[1].startswith('-'): file_name=sys.argv[1]
 
@@ -143,7 +147,7 @@ if not os.path.isfile(file_name): exit(1)
 with open(file_name, 'r', encoding="utf-8") as f:
     contents=f.read()
     dtime=datetime.now().strftime("%Y%m%d%H%M")
-    with open(file_name.replace('.har','')+'-'+dtime+'.har', 'w') as f2:
+    with open(file_name.replace('.har','')+'-'+dtime+'.har', 'w', encoding="utf-8") as f2:
         f2.write(contents)
         print("Copied har file to: "+file_name.replace('.har','')+'-'+dtime+'.har')	
 
@@ -198,7 +202,6 @@ for entry in content_j['log']['entries']:
                                         top_posts.append(item[3][1]['__bbox']['result'])
                             except: pass
         except (AttributeError, KeyError) as ex: logging.exception("error")
-
 if (not file_name):
     print ("Found no page or group. Exiting...")
     exit(0)
@@ -250,8 +253,7 @@ for post in data:
             pass
 
 if (len(fbposts_list)>1):
-    with open(file_name+'-'+dtime+'.csv', 'w') as f:
+    with open(file_name+'-'+dtime+'.csv', 'w', encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerows(fbposts_list)
         print("Exported CSV data to: "+file_name+'-'+dtime+'.csv')
-        
