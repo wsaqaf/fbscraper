@@ -138,7 +138,7 @@ def debug_content(content):
 
 ####################### end functions ###########################
 
-file_name="/Users/walid/desktop/www.facebook.com.har"
+file_name="www.facebook.com.har"
 if len(sys.argv)>1:
     if not sys.argv[1].startswith('-'): file_name=sys.argv[1]
 
