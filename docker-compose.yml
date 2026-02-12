@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  fbscraper:
+    build: .
+    image: fbscraper-app
+    container_name: fbscraper_container
+    ports:
+      - "8081:80"
+    volumes:
+      - .:/var/www/html
+    user: "root" 
+    restart: unless-stopped

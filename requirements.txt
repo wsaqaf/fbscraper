@@ -1,0 +1,9 @@
+flask
+pandas
+requests
+beautifulsoup4
+python-dateutil
+lxml
+pytz
+urllib3
+chardet
