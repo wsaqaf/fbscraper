@@ -1,259 +1,369 @@
-import sys
 import os
+import sys
 import json
-import csv
+import pandas as pd
+import logging
 import re
 from datetime import datetime
-from bs4 import BeautifulSoup
-import html
-import logging
+from flask import Flask, request, jsonify
 
-####################### functions ###########################
+app = Flask(__name__)
 
-def get_json_element_by_key(obj, search_key):
-    try:
+# --- CONFIGURATION ---
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+UPLOAD_PATH = os.path.join(BASE_DIR, "UPLOAD_FOLDER")
+
+if not os.path.exists(UPLOAD_PATH):
+    os.makedirs(UPLOAD_PATH)
+
+# --- CSV HEADERS ---
+FB_POST_HEADER = [
+    'post_id', 'post_url', 'author_name', 'author_id', 
+    'publish_time', 'text_content', 
+    'like_count', 'love_count', 'haha_count', 'wow_count', 'sad_count', 'angry_count',
+    'share_count', 'comment_count', 
+    'video_view_count', 'video_duration_sec', 'video_thumbnail_url', 'media_urls'
+]
+
+FB_USER_HEADER = [
+    'user_id', 'user_name', 'profile_url', 'profile_pic_url', 'is_verified'
+]
+
+# --- HELPERS ---
+
+def find_node_by_key(obj, target_key):
+    """Recursively searches for a dictionary key."""
+    if isinstance(obj, dict):
+        if target_key in obj: return obj[target_key]
+        for key, value in obj.items():
+            result = find_node_by_key(value, target_key)
+            if result is not None: return result
+    elif isinstance(obj, list):
+        for item in obj:
+            result = find_node_by_key(item, target_key)
+            if result is not None: return result
+    return None
+
+def find_profile_pic(story):
+    """Aggressively searches for a profile picture URI."""
+    # 1. Check Context Layout (Feed)
+    context_layout = find_node_by_key(story, 'context_layout')
+    if context_layout:
+        actor_photo = find_node_by_key(context_layout, 'actor_photo')
+        if actor_photo:
+            pic = find_node_by_key(actor_photo, 'profile_picture')
+            if pic and isinstance(pic, dict) and 'uri' in pic:
+                return pic['uri']
+
+    # 2. Check 'actors' list (Search Results)
+    actors = find_node_by_key(story, 'actors')
+    if isinstance(actors, list):
+        for actor in actors:
+            if 'profile_picture' in actor:
+                return actor['profile_picture'].get('uri')
+
+    # 3. Fallback
+    pic_node = find_node_by_key(story, 'profile_picture')
+    if pic_node and isinstance(pic_node, dict) and 'uri' in pic_node:
+        return pic_node['uri']
+    return ""
+
+def extract_text_content(story):
+    if 'message' in story and isinstance(story['message'], dict):
+        return story['message'].get('text', '')
+    msg_node = find_node_by_key(story, 'message')
+    if isinstance(msg_node, dict):
+        return msg_node.get('text', '')
+    return ""
+
+def extract_metrics(story):
+    metrics = {
+        'like': 0, 'love': 0, 'haha': 0, 'wow': 0, 'sad': 0, 'angry': 0,
+        'share': 0, 'comment': 0, 'views': 0
+    }
+    
+    ufi_renderer = find_node_by_key(story, 'comet_ufi_summary_and_actions_renderer')
+    if not ufi_renderer:
+        feedback_context = find_node_by_key(story, 'feedback_context')
+        if feedback_context:
+            ufi_renderer = find_node_by_key(feedback_context, 'feedback')
+
+    if ufi_renderer and isinstance(ufi_renderer, dict):
+        feedback = ufi_renderer.get('feedback') or ufi_renderer
+        
+        rc = feedback.get('reaction_count')
+        metrics['like'] = rc.get('count', 0) if isinstance(rc, dict) else (rc or 0)
+        
+        sc = feedback.get('share_count')
+        metrics['share'] = sc.get('count', 0) if isinstance(sc, dict) else (sc or 0)
+        
+        cc = find_node_by_key(feedback, 'total_count')
+        metrics['comment'] = cc if cc else 0
+        
+        vc = feedback.get('video_view_count')
+        metrics['views'] = vc if vc else 0
+
+        reaction_map = {
+            '1635855486666999': 'like', '1678524932434102': 'love', 
+            '115940658764963': 'haha', '478547315650144': 'wow', 
+            '908563459236466': 'sad', '444813342392137': 'angry'
+        }
+        top_reactions = feedback.get('top_reactions', {}).get('edges', [])
+        for edge in top_reactions:
+            node = edge.get('node', {})
+            r_id = node.get('id')
+            count = edge.get('reaction_count', 0)
+            if r_id in reaction_map:
+                metrics[reaction_map[r_id]] = count
+    return metrics
+
+def extract_media_deep(story):
+    """
+    Scans for media URLs and video stats.
+    """
+    data = {
+        'media_urls': set(),
+        'video_duration': 0,
+        'video_thumbnail': ''
+    }
+    
+    def scan(obj):
         if isinstance(obj, dict):
-            for key, value in obj.items():
-                if key == search_key:
-                    return value
-                else:
-                    result = get_json_element_by_key(value, search_key)
-                    if result is not False:
-                        return result
+            # Check for MEDIA objects
+            if 'media' in obj and isinstance(obj['media'], dict):
+                media = obj['media']
+                
+                # Images
+                if 'image' in media and 'uri' in media['image']:
+                    data['media_urls'].add(media['image']['uri'])
+                if 'photo_image' in media and 'uri' in media['photo_image']:
+                    data['media_urls'].add(media['photo_image']['uri'])
+                if 'large_share_image' in media and 'uri' in media['large_share_image']:
+                    data['media_urls'].add(media['large_share_image']['uri'])
+
+                # Videos (Progressive is best)
+                if 'videoDeliveryResponseFragment' in media:
+                    res = media['videoDeliveryResponseFragment'].get('videoDeliveryResponseResult')
+                    if res and 'progressive_urls' in res:
+                        for prog in res['progressive_urls']:
+                            if 'progressive_url' in prog:
+                                data['media_urls'].add(prog['progressive_url'])
+                
+                # Video Fallbacks
+                if 'playable_url' in media and media['playable_url']:
+                    data['media_urls'].add(media['playable_url'])
+                if 'browser_native_hd_url' in media and media['browser_native_hd_url']:
+                    data['media_urls'].add(media['browser_native_hd_url'])
+                if 'browser_native_sd_url' in media and media['browser_native_sd_url']:
+                    data['media_urls'].add(media['browser_native_sd_url'])
+
+                # Thumbnails
+                if 'preferred_thumbnail' in media and 'image' in media['preferred_thumbnail']:
+                    uri = media['preferred_thumbnail']['image'].get('uri')
+                    if uri:
+                        data['video_thumbnail'] = uri
+                        data['media_urls'].add(uri)
+
+                # Duration
+                if 'playable_duration_in_ms' in media:
+                    try: data['video_duration'] = media['playable_duration_in_ms'] / 1000
+                    except: pass
+
+            # Recurse values
+            for k, v in obj.items():
+                scan(v)
+                
         elif isinstance(obj, list):
             for item in obj:
-                result = get_json_element_by_key(item, search_key)
-                if result is not False:
-                    return result
-        return False
-    except:
-        return False
+                scan(item)
 
-def find_value_by_key(json_string, search_key):
-    try:
-        data = json.loads(json_string)
-        return get_json_element_by_key(data, search_key)
-    except json.JSONDecodeError:
-        return False
+    scan(story)
+    return data
 
-def load_post(p,i):
-    fbpost={}
-    for r in labels_str: fbpost[r]=""
-    for r in labels_num: fbpost[r]=0
-    fbpost["post_id"]=p['post_id']
-#### post time & url ####
-    fbpost["post_time"]=datetime.fromtimestamp(p['comet_sections']['context_layout']['story']['comet_sections']['metadata'][0]['story']['creation_time']).isoformat()
-    fbpost["post_url"]=p['comet_sections']['context_layout']['story']['comet_sections']['metadata'][0]['story']['url']
-#### post text ####
-    try:
-        fbpost["post_text"]=p['comet_sections']['content']['story']['message']['text'].replace('\n', '')
-    except:
-        fbpost["post_text"]=""
+# --- MAIN LOGIC ---
 
-#### user info ####
-    fbpost["user_id"]=p['comet_sections']['context_layout']['story']['comet_sections']['title']['story']['actors'][0]['id']
-    fbpost["user_name"]=p['comet_sections']['context_layout']['story']['comet_sections']['title']['story']['actors'][0]['name']
-    fbpost["user_webpage"]=p['comet_sections']['context_layout']['story']['comet_sections']['title']['story']['actors'][0]['url']
-    fbpost["user_profile"]=p['comet_sections']['context_layout']['story']['comet_sections']['actor_photo']['story']['actors'][0]['profile_url']
-    fbpost["user_profile_pic"]=p['comet_sections']['context_layout']['story']['comet_sections']['actor_photo']['story']['actors'][0]['profile_picture']['uri']
-    
-#### post content ####
-    try: fbpost["post_text"]=p['comet_sections']['content']['story']['message']['text'].replace('\n', '')
-    except: fbpost["post_text"]=""
-    
-    for attachment in p['comet_sections']['content']['story']['attachments']:
-        attachment_type=attachment['style_list'][0]
-#### Web preview (if any) ####
-        if (attachment_type=='share'):
-            if (attachment['styles']['attachment']['story_attachment_link_renderer']['attachment']['web_link']['__typename']=='ExternalWebLink'):
-                fbpost["weblink_url"]=attachment['styles']['attachment']['story_attachment_link_renderer']['attachment']['web_link']['url']
-            else:
-                try:
-                    fbpost["weblink_url"]=attachment['styles']['attachment']['url']
-                    fbpost["weblink_title"]=attachment['styles']['attachment']['source']['text']
-                except: pass
-            try: fbpost["weblink_pic"]=attachment['styles']['attachment']['media']['large_share_image']['uri']
-            except: pass
-            try: fbpost["weblink_preview"]=attachment['styles']['attachment']['title_with_entities']['text'].replace('\n', '')
-            except: pass                
-#### Photo (if any) ####
-        elif (attachment_type=='photo'):
-            fbpost["photo_url"]=attachment['styles']['attachment']['media']['photo_image']['uri']
-        elif (attachment_type=='album'):
-            for photo in attachment['styles']['attachment']['all_subattachments']['nodes']:
-                fbpost["photo_url"]=fbpost["photo_url"]+photo['media']['image']['uri']+"\n"
-            fbpost["photo_url"]=fbpost["photo_url"].strip()
-#### Video (if any) ####
-        elif (attachment_type.startswith('video')):
-            fbpost["video_url"]=attachment['styles']['attachment']['media']['url']
-            fbpost["video_permalink"]=attachment['styles']['attachment']['media']['permalink_url']
-            fbpost["video_duration"]=attachment['styles']['attachment']['media']['playable_duration_in_ms']
-            fbpost["video_thumbnail"]=attachment['styles']['attachment']['media']['preferred_thumbnail']['image']['uri']
-        break
-#### Reactions ####
+def extract_fb_data(har_data):
+    posts = {}
+    users = {}
 
-    try:
-        feedback=p['comet_sections']['feedback']['story']['feedback_context']['feedback_target_with_context']['ufi_renderer']['feedback']['comet_ufi_summary_and_actions_renderer']['feedback']
-        fbpost["shares"]=feedback['share_count']['count']
-        
-        try: fbpost["comments"]=feedback['comments_count_summary_renderer']['feedback']['comment_count']['total_count']
-        except: fbpost["comments"]=feedback['comments_count_summary_renderer']['feedback']['total_comment_count']
-
-        try: fbpost["video_view_count"]=feedback['video_view_count']
-        except: pass
-        for reaction in feedback['cannot_see_top_custom_reactions']['top_reactions']['edges']:
-            if (reaction['node']['id']=="1635855486666999"): fbpost["like"]=reaction['reaction_count']
-            elif (reaction['node']['id']=="1678524932434102"): fbpost["love"]=reaction['reaction_count']
-            elif (reaction['node']['id']=="478547315650144"): fbpost["wow"]=reaction['reaction_count']
-            elif (reaction['node']['id']=="115940658764963"): fbpost["haha"]=reaction['reaction_count']
-            elif (reaction['node']['id']=="908563459236466"): fbpost["sad"]=reaction['reaction_count']
-            elif (reaction['node']['id']=="444813342392137"): fbpost["angry"]=reaction['reaction_count']
-        fbpost["reactions"]=fbpost["like"]+fbpost["love"]+fbpost["wow"]+fbpost["haha"]+fbpost["sad"]+fbpost["angry"]
-    except: pass
-#### add post to collection using post_id as key ####
-    fbpost_list=[]
-    for item in fbposts_list[0]: fbpost_list.append(fbpost[item])
-    return fbpost_list
-
-#check if key exists
-def key_exists(element, *keys):
-    if not isinstance(element, dict):
-        raise AttributeError('keys_exists() expects dict as first argument.')
-    if len(keys) == 0:
-        raise AttributeError('keys_exists() expects at least two arguments, one given.')
-
-    _element = element
-    for key in keys:
-        try:
-            _element = _element[key]
-        except KeyError:
-            return False
-    return True
-
-#for debugging purposes only
-def debug_content(content):
-    text_file = open("temp.txt", "w")
-    text_file.write(content)
-    text_file.close()
-
-####################### end functions ###########################
-
-file_name="www.facebook.com.har"
-if len(sys.argv)>1:
-    if not sys.argv[1].startswith('-'): file_name=sys.argv[1]
-
-if not os.path.isfile(file_name): exit(1)
-
-with open(file_name, 'r', encoding="utf-8") as f:
-    contents=f.read()
-    dtime=datetime.now().strftime("%Y%m%d%H%M")
-    with open(file_name.replace('.har','')+'-'+dtime+'.har', 'w', encoding="utf-8") as f2:
-        f2.write(contents)
-        print("Copied har file to: "+file_name.replace('.har','')+'-'+dtime+'.har')	
-
-content_j=json.loads(contents)
-m=""
-
-try:
-    m=re.search('https://www\.facebook\.com/(.+[^/])/?',content_j['log']['pages'][0]['title'])
-except:
-    try:
-        m=re.search('https://www\.facebook\.com/(.+[^/])/?',content_j['log']['entries'][0]['url'])
-    except: pass
-
-if m:
-    file_name=m.group(1)
-    pattern=re.compile('[\W_]+')
-    file_name=pattern.sub('_', file_name)
-    if len(file_name)>50: file_name=file_name[:50]
-    print("Found: "+file_name)
-else:
-    print ("Failed to find reference")
-    exit(1)
-
-content="["
-top_posts=[]
-for entry in content_j['log']['entries']:
-    if entry['request']['url']=='https://www.facebook.com/api/graphql/':
-        try:
-            content=content+entry['response']['content']['text'].replace('\\"','')+","
-        except:
-            pass
-    elif entry['_resourceType']=="document":
-        try:
-            if ('text' in entry['response']['content']):
-                soup = BeautifulSoup(entry['response']['content']['text'], "html.parser")
-                script_tags = soup.find_all('script')#, type='application/json')
-                content_list = [tag.text.strip() for tag in script_tags]
-                for tag in script_tags:
-                    m = re.search("(\{\"define\"\:\[\[.+?)\)\;", str(tag))
-                    if m:
-                        tag_text = m.group(1)
-                        json_el=json.loads(tag_text)
-                        try:
-                            top_post=get_json_element_by_key(json_el,"timeline_list_feed_units")
-                            if (top_post):
-                                top_posts.append(top_post['edges'][0])
-                        except:
-                            try:
-                                if (key_exists(item[3][1],'__bbox','result','data','serpResponse','results','edges')):
-                                    temp_j=item[3][1]['__bbox']['result']['data']['serpResponse']['results']['edges'][0]
-                                    if (key_exists(temp_j,'relay_rendering_strategy','view_model','click_model')):
-                                        top_posts.append(item[3][1]['__bbox']['result'])
-                            except: pass
-        except (AttributeError, KeyError) as ex: logging.exception("error")
-if (not file_name):
-    print ("Found no page or group. Exiting...")
-    exit(0)
-
-content=content.rstrip(",")+"]"
-content=re.compile('}\s*{').sub('},{', content)
-
-data = json.loads(content)
-
-if (top_posts): data=top_posts+data
-    
-labels_str=["post_id","post_time","post_url","user_id","user_name","user_webpage","user_profile","user_profile_pic","post_text","weblink_url","weblink_title","weblink_pic","weblink_preview","photo_url","video_url","video_duration"]
-labels_num=["video_view_count","shares","comments","reactions",'like','love','wow','haha','sad','angry']
-fbposts_list=[]
-fbposts_list.append(labels_str+labels_num)
-
-i=-1
-for post in data:
-     
-    try: post=post['data']
-    except: pass
-    i=i+1
-    try:
-        if (post['node']['__typename']=='Story'):
-            new_post=load_post(post['node'],i)
-            fbposts_list.append(new_post)
-        elif (post['node']['__typename']=='User' or post['node']['__typename']=='Page' or post['node']['__typename']=='Group'):
-            if (post['node']['__typename']=='User'):
-                posts=post['node']['timeline_list_feed_units']['edges']
-            elif (post['node']['__typename']=='Page'):
-                posts=post['node']['timeline_feed_units']['edges']
-            elif (post['node']['__typename']=='Group'):
-                posts=post['node']['group_feed']['edges']
-            for p in posts:
-                new_post=load_post(p['node'],i)
-                fbposts_list.append(new_post)
-        else:
-            new_post=load_post(post['node'],i)
-            fbposts_list.append(new_post)
-                
-    except:
-        try:
-            posts=post['serpResponse']['results']['edges']
-            for p in posts:
-                new_post=load_post(p['relay_rendering_strategy']['view_model']['click_model']['story'],i)
-                fbposts_list.append(new_post)
+    entries = har_data.get('log', {}).get('entries', [])
+    for entry in entries:
+        if "facebook.com/api/graphql/" not in entry['request']['url']:
             continue
-        except:
-            pass
+            
+        resp_text = entry.get('response', {}).get('content', {}).get('text', '')
+        if not resp_text: continue
 
-if (len(fbposts_list)>1):
-    with open(file_name+'-'+dtime+'.csv', 'w', encoding="utf-8") as f:
-        writer = csv.writer(f)
-        writer.writerows(fbposts_list)
-        print("Exported CSV data to: "+file_name+'-'+dtime+'.csv')
+        parts = resp_text.strip().split('\n')
+        for part in parts:
+            try:
+                data = json.loads(part)
+                
+                # --- A. USER EXTRACTION (Search Results) ---
+                if 'serpResponse' in data.get('data', {}):
+                     results = data['data']['serpResponse'].get('results', {}).get('edges', [])
+                     for res in results:
+                         if 'rendering_strategy' in res:
+                             strategies = res['rendering_strategy'].get('result_rendering_strategies', [])
+                             for strat in strategies:
+                                 vm = strat.get('view_model', {})
+                                 prof = vm.get('profile', {})
+                                 if prof:
+                                     u_id = prof.get('id')
+                                     if u_id and u_id not in users:
+                                         users[u_id] = {
+                                             'user_id': u_id,
+                                             'user_name': prof.get('name'),
+                                             'profile_url': prof.get('url'),
+                                             'profile_pic_url': find_profile_pic(prof),
+                                             'is_verified': prof.get('is_verified', False)
+                                         }
+
+                # --- B. POST EXTRACTION ---
+                edges = []
+                if 'serpResponse' in data.get('data', {}):
+                    edges = data['data']['serpResponse'].get('results', {}).get('edges', [])
+                elif 'node' in data.get('data', {}):
+                    edges = [{'node': data['data']['node']}]
+                elif 'viewer' in data.get('data', {}):
+                    edges = data['data']['viewer'].get('news_feed', {}).get('edges', [])
+                
+                if not edges:
+                    found_edges = find_node_by_key(data, 'edges')
+                    if isinstance(found_edges, list): edges = found_edges
+
+                if not edges: continue
+
+                for edge in edges:
+                    if not isinstance(edge, dict): continue
+                    
+                    story = find_node_by_key(edge, 'story')
+                    if not story or not isinstance(story, dict): continue
+                    
+                    p_id = story.get('post_id') or story.get('id')
+                    if not p_id or len(str(p_id)) < 5: continue 
+                    if p_id in posts: continue
+
+                    # 1. Author
+                    actor = {}
+                    actors_list = story.get('actors') or find_node_by_key(story, 'actors')
+                    if actors_list and isinstance(actors_list, list) and len(actors_list) > 0:
+                        actor = actors_list[0]
+                    
+                    u_id = actor.get('id')
+                    u_name = actor.get('name')
+                    u_url = actor.get('url')
+                    u_pic = find_profile_pic(story)
+                    
+                    # 2. Verification
+                    u_verified = False
+                    title_ranges = find_node_by_key(story, 'ranges')
+                    if title_ranges and isinstance(title_ranges, list):
+                        for rng in title_ranges:
+                            entity = rng.get('entity', {})
+                            if entity.get('id') == u_id:
+                                u_verified = entity.get('is_verified', False)
+                    if not u_verified and actor.get('is_verified'):
+                        u_verified = True
+
+                    # 3. Metadata
+                    p_url = story.get('permalink_url') or story.get('wwwURL') or story.get('url')
+                    if not p_url: p_url = f"https://www.facebook.com/{p_id}"
+
+                    publish_time = ""
+                    creation_time = story.get('creation_time') or find_node_by_key(story, 'creation_time')
+                    if creation_time:
+                        try: publish_time = datetime.fromtimestamp(int(creation_time)).strftime('%Y-%m-%d %H:%M:%S')
+                        except: pass
+
+                    text_content = extract_text_content(story)
+                    metrics = extract_metrics(story)
+                    
+                    # 4. MEDIA & LINKS (Deep Scan)
+                    media_data = extract_media_deep(story)
+                    clean_media = "; ".join(list(media_data['media_urls']))
+
+                    posts[p_id] = {
+                        'post_id': p_id,
+                        'post_url': p_url,
+                        'author_name': u_name,
+                        'author_id': u_id,
+                        'publish_time': publish_time,
+                        'text_content': text_content.replace('\n', ' ').strip(),
+                        
+                        'like_count': metrics['like'],
+                        'love_count': metrics['love'],
+                        'haha_count': metrics['haha'],
+                        'wow_count': metrics['wow'],
+                        'sad_count': metrics['sad'],
+                        'angry_count': metrics['angry'],
+                        'share_count': metrics['share'],
+                        'comment_count': metrics['comment'],
+                        
+                        'video_view_count': metrics['views'],
+                        'video_duration_sec': media_data['video_duration'],
+                        'video_thumbnail_url': media_data['video_thumbnail'],
+                        'media_urls': clean_media
+                    }
+
+                    if u_id and u_id not in users:
+                        users[u_id] = {
+                            'user_id': u_id,
+                            'user_name': u_name,
+                            'profile_url': u_url,
+                            'profile_pic_url': u_pic,
+                            'is_verified': u_verified
+                        }
+                    elif u_id and u_verified and not users[u_id]['is_verified']:
+                        users[u_id]['is_verified'] = True
+                             
+            except Exception: continue
+            
+    return list(posts.values()), list(users.values())
+
+def run_processing(filename):
+    try:
+        with open(filename, 'r', encoding='utf-8') as f:
+            har_data = json.load(f)
+
+        posts, users = extract_fb_data(har_data)
+        
+        base_name = os.path.splitext(os.path.basename(filename))[0]
+        dt_postfix = datetime.now().strftime('%Y%m%d_%H%M%S')
+        
+        p_csv = f"{base_name}_fbposts_{dt_postfix}.csv"
+        u_csv = f"{base_name}_fbusers_{dt_postfix}.csv"
+
+        if posts:
+            pd.DataFrame(posts).reindex(columns=FB_POST_HEADER).to_csv(os.path.join(UPLOAD_PATH, p_csv), index=False)
+        else:
+            pd.DataFrame(columns=FB_POST_HEADER).to_csv(os.path.join(UPLOAD_PATH, p_csv), index=False)
+            
+        if users:
+            pd.DataFrame(users).reindex(columns=FB_USER_HEADER).to_csv(os.path.join(UPLOAD_PATH, u_csv), index=False)
+        else:
+            pd.DataFrame(columns=FB_USER_HEADER).to_csv(os.path.join(UPLOAD_PATH, u_csv), index=False)
+
+        return {
+            "status": "success",
+            "posts_count": len(posts),
+            "users_count": len(users),
+            "files": [p_csv, u_csv]
+        }
+    except Exception as e:
+        return {"status": "error", "message": str(e)}
+
+@app.route("/api/process", methods=["POST"])
+def process_api():
+    if 'file' not in request.files: return jsonify({"error": "No file"}), 400
+    file = request.files['file']
+    if file.filename == '': return jsonify({"error": "No file"}), 400
+    filepath = os.path.join(UPLOAD_PATH, file.filename)
+    file.save(filepath)
+    return jsonify(run_processing(filepath))
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1:
+        print(json.dumps(run_processing(sys.argv[1])))
+    else:
+        app.run(host='0.0.0.0', port=5000)
