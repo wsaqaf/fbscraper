@@ -1,0 +1,11 @@
+version: '3.8'
+
+services:
+  fbscraper:
+    build: .
+    container_name: fbscraper-app
+    ports:
+      - "8081:80"
+    volumes:
+      - ./UPLOAD_FOLDER:/var/www/html/UPLOAD_FOLDER
+    restart: always

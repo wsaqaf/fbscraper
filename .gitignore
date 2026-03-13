@@ -5,7 +5,4 @@ UPLOAD_FOLDER/*
 *.csv
 vendor/
 node_modules/
-.dockerignore
-Dockerfile
-docker-compose.yml
-uploads.ini
+
