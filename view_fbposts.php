@@ -235,7 +235,7 @@ else {
     </div>
 
     <div class="footer">
-        <p>FBScraper - <a href="https://github.com/mosbth/fbscraper" target="_blank">View on GitHub</a></p>
+        <p>FBScraper - <a href="https://github.com/wsaqaf/fbscraper" target="_blank">View on GitHub</a></p>
     </div>
 
     <div class="floating-nav">
