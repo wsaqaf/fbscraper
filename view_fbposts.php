@@ -151,10 +151,11 @@ $filePath = __DIR__ . "/UPLOAD_FOLDER/" . basename($file);
 
     <div class="container-fluid">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2>Parsed Data: <small class="text-muted">
-                    <?php echo htmlspecialchars($file); ?>
-                </small></h2>
-            <a href="index.php" class="btn btn-outline-secondary">← Upload New File</a>
+            <h2 class="m-0">Parsed Data: <small class="text-muted"><?php echo htmlspecialchars($file); ?></small></h2>
+            <div>
+                <a href="https://github.com/wsaqaf/fbscraper" target="_blank" class="btn btn-outline-dark me-2">GitHub</a>
+                <a href="index.php" class="btn btn-outline-secondary">← Upload New File</a>
+            </div>
         </div>
 
         <div class="table-container">

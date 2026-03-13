@@ -90,7 +90,10 @@ elseif ($_SERVER["REQUEST_METHOD"] === "POST" && isset($_FILES["fileToUpload"]))
 
 <body>
     <div class="container">
-        <h2 class="text-center text-primary">FBScraper</h2>
+        <div class="d-flex justify-content-between align-items-center mb-0">
+            <h2 class="text-primary m-0">FBScraper</h2>
+            <a href="https://github.com/wsaqaf/fbscraper" target="_blank" class="btn btn-outline-dark btn-sm">GitHub</a>
+        </div>
         <hr>
         <?php if ($message): ?>
         <div class="alert alert-danger">
