@@ -1,0 +1,11 @@
+.DS_Store
+UPLOAD_FOLDER/*
+!UPLOAD_FOLDER/.gitkeep
+*.har
+*.csv
+vendor/
+node_modules/
+.dockerignore
+Dockerfile
+docker-compose.yml
+uploads.ini
